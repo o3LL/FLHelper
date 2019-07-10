@@ -7,7 +7,7 @@
       @click="getFileMeta(file)"
     >
       {{ file.name }}
-      {{ file.tempo }}
+      {{ file.projectInfo.tempo }}
     </li>
   </div>
 </template>
@@ -42,40 +42,54 @@ export default {
   mounted() {
     db.defaults({ projects: [] }).write();
     this.files = db.get("projects").value();
+    let dirFiles = fs.readdirSync(PROJET_FOLDER, "utf-8");
 
-    fs.readdir(PROJET_FOLDER, "utf-8", (err, data) => {
-      data
-        .filter(file => path.extname(file).toLowerCase() === EXTENSION)
-        .forEach(name => {
+    const start = async () => {
+      let validFile = dirFiles.filter(
+        file => path.extname(file).toLowerCase() === EXTENSION
+      );
+
+      await this.asyncForEach(validFile, name => {
+        this.getFileMeta(name).then(projectInfo => {
+          delete projectInfo.channels;
+          delete projectInfo.effectChannels;
+          console.log(projectInfo);
           db.get("projects")
             .pushUnique("name", {
               id: shortid.generate(),
-              name
+              name,
+              projectInfo
             })
             .write();
         });
+      });
+    };
 
-      this.files = db.get("projects").value();
-    });
+    start();
+    // this.files = db.get("projects").value();
+    /*
+    db.get("projects")
+      .find({ name: file.name })
+      .assign(projectInfo)
+      .write();
+    */
   },
   methods: {
-    getFileMeta: function(file) {
-      parser.parseFile(
-        path.join(PROJET_FOLDER, file.name),
+    getFileMeta: async function(file) {
+      return await parser.parseFile(
+        path.join(PROJET_FOLDER, file),
         (err, projectInfo) => {
           if (err) throw err;
-          delete projectInfo.channels;
-          delete projectInfo.effectChannels;
-
-          db.get("projects")
-            .find({ name: file.name })
-            .assign(projectInfo)
-            .write();
+          return projectInfo;
         }
       );
-
       // How ?
-      this.files = Object.assign({}, this.files, file);
+      // this.files = Object.assign({}, this.files, file);
+    },
+    asyncForEach: async function(array, callback) {
+      for (let index = 0; index < array.length; index++) {
+        await callback(array[index], index, array);
+      }
     }
   }
 };
